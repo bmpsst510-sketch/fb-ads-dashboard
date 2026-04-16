@@ -174,14 +174,21 @@ function mergeRows(rows: ReturnType<typeof normalize>[], params: InsightsParams)
   return [...map.values()];
 }
 
-// Extract action value by action_type from actions / action_values arrays
-function pickAction(list: any[] | undefined, types: string[]): number {
+// Pick a single action value by priority — FB returns the same conversion under
+// multiple action_types (omni_purchase, purchase, offsite_conversion.fb_pixel_purchase, ...)
+// which all represent the same transactions from different attribution views. Summing
+// them would double/triple count. We take the FIRST match in priority order.
+function pickAction(list: any[] | undefined, typesByPriority: string[]): number {
   if (!list) return 0;
-  let sum = 0;
-  for (const row of list) {
-    if (types.includes(row.action_type)) sum += Number(row.value) || 0;
+  for (const type of typesByPriority) {
+    for (const row of list) {
+      if (row.action_type === type) {
+        const v = Number(row.value) || 0;
+        if (v > 0) return v;
+      }
+    }
   }
-  return sum;
+  return 0;
 }
 
 function normalize(r: any) {
@@ -192,22 +199,25 @@ function normalize(r: any) {
   const cpc = Number(r.cpc) || 0;
   const cpm = Number(r.cpm) || 0;
 
-  // Purchase events: prefer offsite pixel purchase, fallback to omni_purchase
-  const purchases = pickAction(r.actions, [
-    "offsite_conversion.fb_pixel_purchase",
+  // Purchase events — FB returns the same transaction under multiple action_types
+  // (omni/standard/pixel). We pick ONE in priority order to match Ads Manager UI's
+  // "Purchases" / "Purchases conversion value" column.
+  // Priority: omni_purchase (unified, default UI) → purchase (standard event)
+  // → offsite_conversion.fb_pixel_purchase (pixel fallback).
+  const PURCHASE_TYPES = [
     "omni_purchase",
     "purchase",
-  ]);
-  const purchaseValue = pickAction(r.action_values, [
     "offsite_conversion.fb_pixel_purchase",
-    "omni_purchase",
-    "purchase",
-  ]);
-  const addToCart = pickAction(r.actions, [
-    "offsite_conversion.fb_pixel_add_to_cart",
+  ];
+  const ATC_TYPES = [
     "omni_add_to_cart",
     "add_to_cart",
-  ]);
+    "offsite_conversion.fb_pixel_add_to_cart",
+  ];
+
+  const purchases = pickAction(r.actions, PURCHASE_TYPES);
+  const purchaseValue = pickAction(r.action_values, PURCHASE_TYPES);
+  const addToCart = pickAction(r.actions, ATC_TYPES);
 
   const roas = purchases > 0 && spend > 0 ? purchaseValue / spend : 0;
   const cpa = purchases > 0 ? spend / purchases : 0;
