@@ -29,6 +29,7 @@ type Row = {
   gender?: string;
   country?: string;
   region?: string;
+  user_segment_key?: string;
   spend: number;
   impressions: number;
   clicks: number;
@@ -114,6 +115,14 @@ const DIMENSIONS: DimensionDef[] = [
     level: "ad",
     getKey: (r) => r.ad_id || "",
     getName: (r) => r.ad_name || "-",
+  },
+  {
+    key: "audience_segment",
+    label: "受眾分類",
+    level: "account",
+    breakdowns: "user_segment_key",
+    getKey: (r) => r.user_segment_key || "",
+    getName: (r) => segmentLabel(r.user_segment_key),
   },
   {
     key: "placement",
@@ -977,6 +986,22 @@ function compactFmt(v: number): string {
 
 function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+// FB API user_segment_key → Ads Manager label
+function segmentLabel(k: string | undefined): string {
+  switch (k) {
+    case "prospecting":
+      return "新受眾 (New audience)";
+    case "engaged":
+      return "互動受眾 (Engaged audience)";
+    case "existing":
+      return "既有客戶 (Existing customers)";
+    case "unknown":
+      return "未分類";
+    default:
+      return k || "-";
+  }
 }
 
 // ---------- Granularity: day / week / month ----------

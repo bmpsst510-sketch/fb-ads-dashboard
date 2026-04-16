@@ -136,15 +136,14 @@ export async function fetchInsights(params: InsightsParams) {
 
 function mergeRows(rows: ReturnType<typeof normalize>[], params: InsightsParams) {
   const level = params.level || "account";
+  const breakdownFields = (params.breakdowns || "").split(",").map((s) => s.trim()).filter(Boolean);
   const keyFn = (r: any) => {
     const parts: string[] = [];
     if (level === "campaign") parts.push(r.campaign_id || "");
     else if (level === "adset") parts.push(r.adset_id || "");
     else if (level === "ad") parts.push(r.ad_id || "");
     else parts.push("account");
-    if (params.breakdowns) {
-      parts.push(r.publisher_platform || "", r.platform_position || "", r.impression_device || "");
-    }
+    for (const f of breakdownFields) parts.push(String(r[f] ?? ""));
     return parts.join("|");
   };
 
@@ -240,6 +239,7 @@ function normalize(r: any) {
     gender: r.gender,
     country: r.country,
     region: r.region,
+    user_segment_key: r.user_segment_key,
     spend,
     impressions,
     clicks,
