@@ -75,6 +75,7 @@ git log --oneline
 **Tags**
 - `v1.0-stable` — 第一個功能完整版（深色主題、維度系統、自選項目、維度日期、dot nodes）
 - `v1.1-stable` — 修復購買數/購買值/ATC 被重複計算 3 倍的 bug（`pickAction` 改為取優先順序第一個，而非加總）
+- `v1.2-stable` — 兩個折線圖新增「日/週/月」切換（client-side 聚合，週以週一為起始，衍生指標重算）
 
 ### 還原到穩定版的指令
 ```bash

@@ -207,6 +207,10 @@ export default function Home() {
   const [topN, setTopN] = useState<number>(5);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
+  // Chart granularity
+  const [mainGran, setMainGran] = useState<Granularity>("day");
+  const [dimGran, setDimGran] = useState<Granularity>("day");
+
   // Per-dimension date range (defaults to global; user can override)
   const [dimRange, setDimRange] = useState(range);
   const [dimRangeOverride, setDimRangeOverride] = useState(false);
@@ -329,6 +333,16 @@ export default function Home() {
     [dimTS, dimension, dimMetric, effectiveKeys]
   );
 
+  // Apply granularity buckets
+  const mainChartData = useMemo(
+    () => rollupTimeSeries(timeSeries, mainGran),
+    [timeSeries, mainGran]
+  );
+  const dimChartData = useMemo(
+    () => rollupPivoted(pivoted, seriesKeys, dimGran),
+    [pivoted, seriesKeys, dimGran]
+  );
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -410,16 +424,19 @@ export default function Home() {
         <section className="bg-slate-900/60 backdrop-blur rounded-xl border border-slate-800 p-5 mb-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="font-semibold text-slate-200">時間趨勢</h2>
-            <MultiPicker
-              label="指標"
-              options={METRICS.map((m) => ({ key: m.key, label: m.label }))}
-              value={chartMetrics}
-              onChange={(v) => setChartMetrics(v.length ? v : ["spend"])}
-            />
+            <div className="flex gap-2 flex-wrap">
+              <GranularityToggle value={mainGran} onChange={setMainGran} />
+              <MultiPicker
+                label="指標"
+                options={METRICS.map((m) => ({ key: m.key, label: m.label }))}
+                value={chartMetrics}
+                onChange={(v) => setChartMetrics(v.length ? v : ["spend"])}
+              />
+            </div>
           </div>
           <div className="h-80">
             <AreaTrendChart
-              data={timeSeries}
+              data={mainChartData}
               xKey="date_start"
               series={chartMetrics.map((k, i) => {
                 const m = METRICS.find((x) => x.key === k)!;
@@ -571,11 +588,12 @@ export default function Home() {
                     重置
                   </button>
                 )}
+                <GranularityToggle value={dimGran} onChange={setDimGran} />
               </div>
             </div>
             <div className="h-72">
               <AreaTrendChart
-                data={pivoted}
+                data={dimChartData}
                 xKey="date"
                 series={seriesKeys.map((k, i) => ({
                   key: k,
@@ -959,4 +977,106 @@ function compactFmt(v: number): string {
 
 function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+// ---------- Granularity: day / week / month ----------
+type Granularity = "day" | "week" | "month";
+
+function bucketDate(dateStr: string, g: Granularity): string {
+  if (!dateStr) return "";
+  if (g === "day") return dateStr;
+  if (g === "month") return dateStr.slice(0, 7); // YYYY-MM
+  // week: ISO-ish, bucket by Monday start
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay(); // 0=Sun .. 6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return iso(d);
+}
+
+// Aggregate Row[] (for main trend) by granularity — recompute derived metrics
+function rollupTimeSeries(rows: Row[], g: Granularity): any[] {
+  if (g === "day") return rows;
+  const byBucket = new Map<string, any>();
+  for (const r of rows) {
+    const k = bucketDate(r.date_start || "", g);
+    if (!k) continue;
+    let e = byBucket.get(k);
+    if (!e) {
+      e = {
+        date_start: k,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        purchases: 0,
+        purchaseValue: 0,
+        addToCart: 0,
+      };
+      byBucket.set(k, e);
+    }
+    e.spend += r.spend || 0;
+    e.impressions += r.impressions || 0;
+    e.clicks += r.clicks || 0;
+    e.purchases += r.purchases || 0;
+    e.purchaseValue += r.purchaseValue || 0;
+    e.addToCart += r.addToCart || 0;
+  }
+  const out = [...byBucket.values()].sort((a, b) => a.date_start.localeCompare(b.date_start));
+  for (const e of out) {
+    e.ctr = e.impressions ? (e.clicks / e.impressions) * 100 : 0;
+    e.cpc = e.clicks ? e.spend / e.clicks : 0;
+    e.cpm = e.impressions ? (e.spend / e.impressions) * 1000 : 0;
+    e.roas = e.spend ? e.purchaseValue / e.spend : 0;
+    e.cpa = e.purchases ? e.spend / e.purchases : 0;
+  }
+  return out;
+}
+
+// Aggregate pivoted dimension data by granularity (sum per series key)
+function rollupPivoted(data: any[], keys: string[], g: Granularity): any[] {
+  if (g === "day" || !data.length) return data;
+  const byBucket = new Map<string, any>();
+  for (const row of data) {
+    const k = bucketDate(row.date, g);
+    if (!k) continue;
+    let e = byBucket.get(k);
+    if (!e) {
+      e = { date: k };
+      for (const s of keys) e[s] = 0;
+      byBucket.set(k, e);
+    }
+    for (const s of keys) e[s] += row[s] || 0;
+  }
+  return [...byBucket.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function GranularityToggle({
+  value,
+  onChange,
+}: {
+  value: Granularity;
+  onChange: (v: Granularity) => void;
+}) {
+  const options: { k: Granularity; l: string }[] = [
+    { k: "day", l: "日" },
+    { k: "week", l: "週" },
+    { k: "month", l: "月" },
+  ];
+  return (
+    <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900 p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.k}
+          onClick={() => onChange(o.k)}
+          className={`px-3 py-1 text-sm rounded-md transition ${
+            value === o.k
+              ? "bg-sky-500/20 text-sky-300"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          {o.l}
+        </button>
+      ))}
+    </div>
+  );
 }
