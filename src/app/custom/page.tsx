@@ -267,7 +267,7 @@ export default function CustomPage() {
       if (series.length < 2) continue;
       const first = series[0];
       const last = series[series.length - 1];
-      if (!first) continue;
+      if (!first || last == null) continue;
       const d = ((last - first) / first) * 100;
       if (Math.abs(d) < TREND_THRESHOLD) continue;
       const isGood = (metric.dir === "up" && d > 0) || (metric.dir === "down" && d < 0);

@@ -676,9 +676,9 @@ function AreaTrendChart({
             boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
           }}
           labelStyle={{ color: "#cbd5e1" }}
-          formatter={(v: number, _n, entry: any) => {
+          formatter={(v: any, _n: any, entry: any) => {
             const s = series.find((x) => x.key === entry?.dataKey);
-            return s ? s.fmt(v) : v;
+            return s ? s.fmt(Number(v) || 0) : v;
           }}
         />
         <Legend wrapperStyle={{ color: "#cbd5e1", fontSize: 12 }} />
