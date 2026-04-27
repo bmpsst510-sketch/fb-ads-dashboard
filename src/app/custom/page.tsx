@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtMoney, fmtNum, fmtPct, fmtDec, presetRange, iso } from "@/lib/format";
+import { useSelectedAccount } from "@/lib/use-account";
 
 // ============================================================
 // Types & Constants
@@ -146,6 +147,8 @@ function saveConfig(c: Config) {
 // ============================================================
 
 export default function CustomPage() {
+  const { accountId, hydrated: accountHydrated } = useSelectedAccount();
+
   const [config, setConfig] = useState<Config>(defaultConfig);
   const [hydrated, setHydrated] = useState(false);
 
@@ -191,7 +194,19 @@ export default function CustomPage() {
   const dimension = DIMENSIONS.find((d) => d.key === config.dimensionKey) || DIMENSIONS[0];
   const metric = METRICS.find((m) => m.key === config.metricKey) || METRICS[0];
 
+  // When account changes (after initial hydration), clear stale item selections —
+  // item names from a previous account won't match the new one's data.
+  const prevAccountRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!accountHydrated) return;
+    if (prevAccountRef.current && prevAccountRef.current !== accountId) {
+      setConfig((c) => ({ ...c, tableCols: [], kpiCards: [] }));
+    }
+    prevAccountRef.current = accountId;
+  }, [accountId, accountHydrated]);
+
+  useEffect(() => {
+    if (!accountHydrated) return;
     let cancelled = false;
     async function load() {
       setError(null);
@@ -201,6 +216,7 @@ export default function CustomPage() {
         const prev = previousRange(cur);
         const buildUrl = (extra: Record<string, string>, range = cur) => {
           const sp = new URLSearchParams({ since: range.since, until: range.until, ...extra });
+          if (accountId) sp.set("account_id", accountId);
           return `/api/insights?${sp.toString()}`;
         };
         const base: Record<string, string> = { level: dimension.level };
@@ -225,7 +241,7 @@ export default function CustomPage() {
     return () => {
       cancelled = true;
     };
-  }, [config.dimensionKey, config.dateSince, config.dateUntil]);
+  }, [config.dimensionKey, config.dateSince, config.dateUntil, accountId, accountHydrated]);
 
   // ===== Build pivot data =====
   // 1. All item names sorted by current-period metric value (desc)

@@ -9,6 +9,7 @@ export type InsightsParams = {
   until: string; // YYYY-MM-DD
   breakdowns?: string; // e.g. "publisher_platform,platform_position"
   timeIncrement?: string | number; // "1" for daily
+  accountId?: string; // overrides FB_AD_ACCOUNT_ID env var
 };
 
 const FIELDS = [
@@ -71,7 +72,7 @@ function toIso(d: Date) {
 }
 
 async function fetchOneWindow(params: InsightsParams, attempt = 0): Promise<any[]> {
-  const accountId = process.env.FB_AD_ACCOUNT_ID!;
+  const accountId = params.accountId || process.env.FB_AD_ACCOUNT_ID!;
   const token = process.env.FB_ACCESS_TOKEN!;
   const search = new URLSearchParams({
     access_token: token,
@@ -112,7 +113,7 @@ async function fetchOneWindow(params: InsightsParams, attempt = 0): Promise<any[
 }
 
 export async function fetchInsights(params: InsightsParams) {
-  const accountId = process.env.FB_AD_ACCOUNT_ID!;
+  const accountId = params.accountId || process.env.FB_AD_ACCOUNT_ID!;
   const token = process.env.FB_ACCESS_TOKEN!;
   if (!accountId || !token) throw new Error("Missing FB credentials");
 

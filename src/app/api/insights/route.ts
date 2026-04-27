@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   const level = (sp.get("level") || "account") as any;
   const breakdowns = sp.get("breakdowns") || undefined;
   const timeIncrement = sp.get("time_increment") || undefined;
+  const accountId = sp.get("account_id") || undefined;
 
   if (!since || !until) {
     return NextResponse.json({ error: "since and until required" }, { status: 400 });
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
       level,
       breakdowns,
       timeIncrement,
+      accountId,
     });
     return NextResponse.json({ data });
   } catch (e: any) {

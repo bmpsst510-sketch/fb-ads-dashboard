@@ -12,6 +12,7 @@ import {
   Legend,
 } from "recharts";
 import { fmtMoney, fmtNum, fmtPct, fmtDec, presetRange, iso } from "@/lib/format";
+import { useSelectedAccount } from "@/lib/use-account";
 
 type Row = {
   date_start?: string;
@@ -194,6 +195,8 @@ const SERIES_COLORS = [
 ];
 
 export default function Home() {
+  const { accountId, hydrated: accountHydrated } = useSelectedAccount();
+
   const [preset, setPreset] = useState<string>("7d");
   const [range, setRange] = useState(presetRange("7d"));
   const [customSince, setCustomSince] = useState(range.since);
@@ -269,11 +272,13 @@ export default function Home() {
 
   // Load overview (KPI + main trend + prev period) — only on range change
   useEffect(() => {
+    if (!accountHydrated) return;
     async function load() {
       setError(null);
       try {
         const q = (extra: Record<string, string>, r = range) => {
           const sp = new URLSearchParams({ since: r.since, until: r.until, ...extra });
+          if (accountId) sp.set("account_id", accountId);
           return `/api/insights?${sp.toString()}`;
         };
         const prev = previousRange(range);
@@ -289,15 +294,17 @@ export default function Home() {
       }
     }
     load();
-  }, [range.since, range.until]);
+  }, [range.since, range.until, accountId, accountHydrated]);
 
   // Load per-dimension data — on dimension OR dim-range change
   useEffect(() => {
+    if (!accountHydrated) return;
     async function load() {
       setLoading(true);
       try {
         const q = (extra: Record<string, string>) => {
           const sp = new URLSearchParams({ since: dimRange.since, until: dimRange.until, ...extra });
+          if (accountId) sp.set("account_id", accountId);
           return `/api/insights?${sp.toString()}`;
         };
         const base: Record<string, string> = { level: dimension.level };
@@ -318,7 +325,7 @@ export default function Home() {
       }
     }
     load();
-  }, [dimensionKey, dimRange.since, dimRange.until]);
+  }, [dimensionKey, dimRange.since, dimRange.until, accountId, accountHydrated]);
 
   const totals = useMemo(() => aggregate(timeSeries), [timeSeries]);
 
